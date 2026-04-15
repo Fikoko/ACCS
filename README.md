@@ -62,7 +62,7 @@ CC=musl-gcc LDFLAGS=-static make               # fully static Linux
 
 ## Supported languages
 
-Python, JavaScript, TypeScript, Java, C, C++, Go, Rust — extensible via `lang_table.c`.
+Extensible via `lang_table.c`. Selectable by design.
 
 ## Output formats
 
@@ -90,7 +90,7 @@ accs/
 | Runtime LLM | Required every session | None — distilled into `weights.bin` |
 | Form factor | Research prototype | Single static binary |
 | Mode | Interactive exploration | Batch analysis |
-| Stack | Python / JS / web | C99 + Canon-C |
+| Stack | Python / JS / web | C99 + Canon-C + weights.bin |
 | ML approach | Uses LLM directly each call | Uses an AI to teach a small model, then ships without it |
 
 Designed for CI pipelines, onboarding docs, automated audits — and applicable to defensive security workflows (e.g. architectural overview of a Ghidra export of an unknown binary).
