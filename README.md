@@ -1,34 +1,46 @@
 # ACCS — Automated Codebase Comprehension System
 
-A single static C99 binary that analyzes any codebase and produces a structured report:
-**what each file does, how files relate, and which files matter most.**
+**The offline, batch-report alternative to LLM-served code graphs.**
 
-No runtime dependencies. No API calls. No internet required. Cross-compiles anywhere.
+A single static C99 binary that analyzes a codebase and produces a report — what each file does, how files relate, and which files matter most. The intelligence is baked in at training time via a distilled classifier; nothing calls out to an AI at runtime.
 
 ---
 
+## Why this exists
+
+Most current code-graph tools (Codebase-Memory, Code-Graph-RAG, Graph-sitter, tree-sitter-analyzer) are built to serve graphs to LLM agents over MCP, interactively. ACCS is the other shape:
+
+- **Offline forever.** No API calls, no network, no runtime model. Useful in air-gapped environments, security workflows, regulated industries, and CI pipelines that can't depend on external services.
+- **Batch reports, not query servers.** Point it at a repo, get JSON / DOT / human-readable output. Fits onboarding docs, automated audits, and CI checks rather than chat-style exploration.
+- **Distilled, not hosted.** A small classifier learns file-role patterns from AI-labeled training data once, then ships as weights inside the binary.
+
+If you want an interactive code-graph for an LLM agent, use Codebase-Memory or similar. If you want a static binary that produces a report and exits, ACCS is for that.
+
 ## Architecture
 
-Three engines working together:
+Three engines:
 
-1. **Tree-sitter engine** — parses source files, extracts actual import/export statements deterministically. Builds the real dependency graph. No guessing.
-2. **ML classifier** — small feedforward neural network loaded from `weights.bin`. Takes file-level features (filename patterns, directory position, token frequencies, AST statistics) and predicts file role: `controller`, `model`, `test`, `util`, `config`, `middleware`, etc. Trained offline using AI-labeled data.
-3. **PageRank** — runs on the real dependency graph from engine 1. Produces importance scores. Deterministic, no ML needed.
+1. **Tree-sitter engine** — parses sources, extracts real import/export edges deterministically across 8 languages.
+2. **Distilled classifier** — small feedforward neural net loaded from `weights.bin`. Takes a fixed-width feature vector per file (filename patterns, directory position, token frequencies, AST statistics) and predicts a role: `controller`, `model`, `test`, `util`, `config`, `middleware`, `entrypoint`, `build`. Trained offline using AI-labeled data; no runtime AI.
+3. **PageRank** — runs on the dependency graph from engine 1. Produces importance scores. Deterministic.
 
-A template formatter combines all three outputs into human-readable summaries.
+A template formatter combines all three into the chosen output format.
 
 ## Two pieces
 
-### Training pipeline (`/training`, throwaway tooling)
-- Feed codebases to AI API
-- the AI labels each file with role, purpose, features
-- Train feedforward net on those labels
-- Export `weights.bin`
-
 ### C99 inference binary (the product)
-- Built entirely on **Canon-C** (arenas, Results, slices, ownership)
-- Scanner → tree-sitter parser → feature extractor → ML classifier → graph builder → PageRank → template reporter
-- Ships as one static binary with `weights.bin`
+- Built on **Canon-C** (arenas, Results, slices, ownership).
+- Pipeline: scanner → tree-sitter parser → feature extractor → classifier → graph builder → PageRank → reporter.
+- Ships as one static binary plus `weights.bin`.
+
+### Training pipeline (`/training`, throwaway tooling)
+- Crawl representative codebases.
+- Featurize each file into a fixed-width vector.
+- Label via AI API.
+- Train feedforward net.
+- Export `weights.bin`.
+
+The training pipeline runs once. The binary runs anywhere, forever, with no external dependencies.
 
 ## Build
 
@@ -56,9 +68,9 @@ CC=musl-gcc LDFLAGS=-static make               # fully static Linux
 
 ## Add a language
 
-1. Download grammar to `grammars/<newlang>/parser.c`
-2. Add an entry to `src/lang_table.c` (~10 lines)
-3. Rebuild: `make`
+1. Download grammar to `grammars/<newlang>/parser.c`.
+2. Add an entry to `src/lang_table.c` (~10 lines).
+3. Rebuild: `make`.
 
 ## Supported languages
 
@@ -73,27 +85,32 @@ Extensible via `lang_table.c`. Selectable by design.
 ```
 accs/
 ├── Makefile
-├── include/        # all core types (.h)
+├── include/        # core types (.h)
 ├── src/            # implementation (.c)
 ├── vendor/
 │   ├── Canon-C/    # arenas, Results, slices
 │   └── tree-sitter/
 ├── grammars/       # one parser.c per language
-├── training/       # Training pipeline (separate)
+├── training/       # Python training pipeline (separate)
 └── build/          # make output
 ```
 
-## How ACCS differs from CodeMap
+## How ACCS sits next to similar tools
 
-| | CodeMap | ACCS |
+| | Codebase-Memory / Code-Graph-RAG / Graph-sitter | ACCS |
 |---|---|---|
-| Runtime LLM | Required every session | None — distilled into `weights.bin` |
-| Form factor | Research prototype | Single static binary |
-| Mode | Interactive exploration | Batch analysis |
-| Stack | Python / JS / web | C99 + Canon-C + weights.bin |
-| ML approach | Uses LLM directly each call | Uses an AI to teach a small model, then ships without it |
+| Primary consumer | LLM agents over MCP | Humans, CI pipelines |
+| Mode | Interactive query server | Batch report |
+| Runtime AI | Yes (LLM in the loop) | No |
+| ML role labels | None or LLM-on-demand | Small distilled classifier in the binary |
+| Form factor | Daemon + DB (often SQLite) | Single static binary + `weights.bin` |
+| Network required | Usually yes | No |
 
-Designed for CI pipelines, onboarding docs, automated audits — and applicable to defensive security workflows (e.g. architectural overview of a Ghidra export of an unknown binary).
+The shared core — Tree-sitter parsing, dependency graph, polyglot — is well-trodden ground at this point. What ACCS does differently is the deployment shape and the distilled-classifier approach.
+
+## Status
+
+Early-stage scaffold. The deterministic parts (scanner, parser, graph, PageRank, reporters) are the first milestone. The classifier and training pipeline are the second.
 
 ## License
 
